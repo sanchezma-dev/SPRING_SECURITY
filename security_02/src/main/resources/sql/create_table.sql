@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS user_security (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    pwd TEXT NOT NULL,
+    rol VARCHAR(50) NOT NULL
+);
