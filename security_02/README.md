@@ -4,6 +4,8 @@
 
 Este proyecto implementa **Spring Security** con validación de usuarios a través de base de datos. Se utiliza **UserDetailsService** para cargar los datos de usuario desde una entidad JPA.
 
+Para desplegar, se hace por docker-compose y desde spring se crea la entidad e inserts en la base de datos
+
 ## Configuración de Seguridad
 
 La seguridad en esta aplicación se basa en los siguientes conceptos clave:
@@ -71,7 +73,5 @@ public class SecurityConfig {
 
 - Propiedades de Spring Security: [Spring Boot Security Properties](https://docs.spring.io/spring-boot/appendix/application-properties/#appendix.application-properties.security)
 
----
 
-Este README proporciona una guía rápida para entender el funcionamiento de Spring Security en esta aplicación. ¡Listo para desplegar y probar! 🚀
 
