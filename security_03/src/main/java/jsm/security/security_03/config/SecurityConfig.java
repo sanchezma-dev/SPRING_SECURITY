@@ -14,10 +14,11 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
         httpSecurity.authorizeHttpRequests(auth ->
-//                        auth.requestMatchers("app/security/**") // para todos los path a partir de ...
-                        auth.requestMatchers("app/security/protected01", "app/security/protected02")
-                                .authenticated()
-                                .anyRequest().permitAll()) // Sin control para todos los demás endpoint
+                        auth.requestMatchers("app/security/protected01")
+                                .hasRole("ADMIN")
+                                .requestMatchers("app/security/protected02")
+                                .hasAnyRole("USER", "SUPERVISOR")
+                                .anyRequest().permitAll())
                 .formLogin(Customizer.withDefaults())
                 .httpBasic(Customizer.withDefaults());
 
@@ -25,9 +26,13 @@ public class SecurityConfig {
 
     }
 
-
-    @Bean // Bean solo para no tener que codificar el pass de usuarios, es deprecated, solo para local
+    @Bean
+        // Bean solo para no tener que codificar el pass de usuarios, es deprecated, solo para local
+        // Es decir, permite hacer el match de PasswordEncoder sin codificar esa comparación (ya que en bbdd se encuentra
+        // sin para esta prueba)
     PasswordEncoder passwordEncoder() {
-        return  NoOpPasswordEncoder.getInstance();
+        return NoOpPasswordEncoder.getInstance();
     }
+
+
 }
