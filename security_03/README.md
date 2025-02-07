@@ -1,44 +1,52 @@
-# Spring Security - Example 2
+# Proyecto de Seguridad con Spring Boot
 
-## Descripción
+## Requisitos previos
+Antes de realizar pruebas, es necesario:
+1. **Levantar el Docker Compose**.
+2. **Ejecutar los scripts de forma manual**, que se encuentran en la carpeta `sql`.
+3. **Importar los JSON de Postman** para ejecutar pruebas sobre la API.
 
-Este proyecto implementa **Spring Security** con validación de usuarios a través de base de datos. Se utiliza **UserDetailsService** para cargar los datos de usuario desde una entidad JPA.
+---
 
-Para desplegar, se hace por docker-compose y desde spring se crea la entidad e inserts en la base de datos
+## Estructura del Proyecto
+El proyecto implementa seguridad en una API con **Spring Security**, gestionando autenticación y autorización a través de roles.
 
-## Configuración de Seguridad
+### Entidades
 
-La seguridad en esta aplicación se basa en los siguientes conceptos clave:
+#### `UserSecurity`
+Entidad que representa a un usuario dentro del sistema.
 
-### **UserDetailsService**
+#### `RolesSecurity`
+Entidad que define los roles asignados a los usuarios. Un usuario puede tener uno o más roles.
 
-Spring Security requiere un servicio que implemente la interfaz `UserDetailsService` para obtener los detalles de autenticación de un usuario. En esta aplicación, la implementación carga los usuarios desde la base de datos:
+Relación entre ambas:
+- **Un usuario puede tener múltiples roles**.
+- **Cada rol pertenece a un usuario**.
 
+---
+
+## Implementación de Seguridad
+
+### `SimpleGrantedAuthority`
+`SimpleGrantedAuthority` es una implementación de `GrantedAuthority` de Spring Security. Representa un rol o permiso asignado a un usuario dentro del sistema.
+
+#### Importante sobre los roles:
+- **Spring Security siempre busca roles con el prefijo `ROLE_`**.
+- Si en la base de datos los roles se almacenan sin este prefijo, es necesario concatenarlo en el servicio.
+- Alternativamente, los roles pueden guardarse directamente con `ROLE_` en la base de datos.
+
+Ejemplo de conversión:
 ```java
-@Service
-@AllArgsConstructor
-public class UserSecurityServiceDetails implements UserDetailsService {
-
-    private final UserSecurityRepository repository;
-
-    @Override
-    public UserDetails loadUserByUsername(String username) {
-        UserSecurity userSecurity = repository.findByEmail(username);
-
-        if (userSecurity == null) {
-            throw new UsernameNotFoundException("User not found: " + username);
-        }
-
-        var authorities = List.of(new SimpleGrantedAuthority(userSecurity.getRol()));
-        return new User(userSecurity.getEmail(), userSecurity.getPwd(), authorities);
-    }
-}
+var authorities = roles.stream()
+    .map(r -> new SimpleGrantedAuthority("ROLE_" + r.getName()))
+    .toList();
 ```
 
-### **Configuración de Seguridad**
+---
 
-La configuración de **Spring Security** se realiza mediante `SecurityFilterChain`:
+## Flujo de Autenticación y Autorización
 
+### `SecurityConfig`
 ```java
 @Configuration
 public class SecurityConfig {
@@ -46,8 +54,10 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
         httpSecurity.authorizeHttpRequests(auth ->
-                        auth.requestMatchers("app/security/protected01", "app/security/protected02")
-                                .authenticated()
+                        auth.requestMatchers("app/security/protected01")
+                                .hasRole("ADMIN")
+                                .requestMatchers("app/security/protected02")
+                                .hasAnyRole("USER", "SUPERVISOR")
                                 .anyRequest().permitAll())
                 .formLogin(Customizer.withDefaults())
                 .httpBasic(Customizer.withDefaults());
@@ -55,23 +65,79 @@ public class SecurityConfig {
         return httpSecurity.build();
     }
 
-    @Bean // Bean solo para no tener que codificar el pass de usuarios, es deprecated, solo para local
+    @Bean
     PasswordEncoder passwordEncoder() {
-        return NoOpPasswordEncoder.getInstance();
+        return NoOpPasswordEncoder.getInstance(); // ⚠ Deprecated, solo para pruebas locales.
+    }
+}
+```
+**Nota:** `NoOpPasswordEncoder` se usa solo para desarrollo local, ya que no realiza cifrado de contraseñas. En producción, se recomienda usar `BCryptPasswordEncoder` u otro mecanismo seguro.
+
+---
+
+## Servicio de Autenticación
+
+```java
+@Service
+@AllArgsConstructor
+public class AuthenticationSecurityService implements AuthenticationProvider {
+
+    private final UserSecurityRepository repository;
+    private PasswordEncoder passwordEncoder;
+
+    @Override
+    public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+        final var username = authentication.getName();
+        final var pwd = authentication.getCredentials().toString();
+
+        UserSecurity userSecurityFromDB = this.repository.findByEmail(username);
+        if (userSecurityFromDB == null || !passwordEncoder.matches(pwd, userSecurityFromDB.getPwd())) {
+            throw new AuthenticationException("Invalid credentials") {};
+        }
+
+        var roles = userSecurityFromDB.getRoles();
+        var authorities = roles.stream()
+                .map(r -> new SimpleGrantedAuthority("ROLE_" + r.getName())) // 🔹 Necesario si en BBDD no está ROLE_
+                .toList();
+
+        return new UsernamePasswordAuthenticationToken(userSecurityFromDB, pwd, authorities);
+    }
+
+    @Override
+    public boolean supports(Class<?> authentication) {
+        return (UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication));
     }
 }
 ```
 
-### **Notas importantes**
+---
 
-- La seguridad se basa en la validación de usuarios desde la base de datos.
-- La aplicación utiliza `UserDetailsService` para cargar el usuario por email.
-- Spring Security **siempre** pasa por `UserDetailsService` antes de procesar la petición si el endpoint requiere autenticación.
-- Se usa `NoOpPasswordEncoder`, pero **en producción se debe utilizar un encriptador seguro como BCrypt**.
+## Controlador de Seguridad
 
-## Recursos
+```java
+@RestController
+@RequestMapping("app/security")
+public class MySecurityController {
 
-- Propiedades de Spring Security: [Spring Boot Security Properties](https://docs.spring.io/spring-boot/appendix/application-properties/#appendix.application-properties.security)
+    @GetMapping("/greetings")
+    public ResponseEntity<String> greetings() {
+        return ResponseEntity.ok("Welcome!!");
+    }
 
+    @GetMapping("/protected01")
+    public ResponseEntity<String> protected01() {
+        return ResponseEntity.ok("Protected resource: 01!!");
+    }
 
+    @GetMapping("/protected02")
+    public ResponseEntity<String> protected02() {
+        return ResponseEntity.ok("Protected resource: 02!!");
+    }
+}
+```
+
+---
+
+## Conclusión
+Este proyecto proporciona una base para implementar autenticación y autorización con Spring Security, permitiendo definir roles y proteger endpoints según permisos. Para pruebas, seguir los pasos indicados en los **Requisitos previos**.
 
