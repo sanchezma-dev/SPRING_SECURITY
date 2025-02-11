@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres-security
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: security_02
+    ports:
+      - "6060:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data-security
+
+volumes:
+  postgres_data:
